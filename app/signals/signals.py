@@ -16,4 +16,7 @@ class Signals(QObject):
     unlock = Signal()  # Desbloquear UI
     busy = Signal(bool)  # Barra indeterminada durante transcripción
     playlist = Signal(list)  # Lista de items (idx, title, id, url)
+    quality_ready = Signal(object, object)  # Job, info de calidades
 
+
+    stages = Signal(int, int, str)  # completadas, total, etapa actual

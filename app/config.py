@@ -7,8 +7,8 @@ import shutil
 # =========================
 # Configuración (ajusta esto)
 # =========================
-FFMPEG_DIR = r"C:\ffmpeg\bin"  # Si FFmpeg está en PATH, déjalo como None
-TRANSCRIBE_MAX_MINUTES = 0  # 0 = sin tope
+FFMPEG_DIR = os.getenv("FFMPEG_DIR") or (r"C:\ffmpeg\bin" if os.name == "nt" else None)
+TRANSCRIBE_MAX_MINUTES = int(os.getenv("TRANSCRIBE_MAX_MINUTES", "0"))  # 0 = sin tope
 
 # Importación condicional de faster-whisper
 try:

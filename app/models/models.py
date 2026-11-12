@@ -13,4 +13,5 @@ class Job:
     do_video: bool
     do_audio: bool
     do_transcribe: bool
+    max_height: int | None = None
 

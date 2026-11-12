@@ -4,12 +4,14 @@ Interfaz gráfica de usuario (UI).
 import os
 import re
 import threading
+from dataclasses import replace
 from urllib.parse import parse_qs, urlparse
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget,
+    QScrollArea,
     QVBoxLayout,
     QHBoxLayout,
     QGridLayout,
@@ -23,6 +25,9 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QFrame,
     QStackedWidget,
+    QDialog,
+    QComboBox,
+    QDialogButtonBox,
 )
 
 from yt_dlp.utils import DownloadError
@@ -35,7 +40,7 @@ from ..signals.signals import Signals
 
 # ---------- Ventana de bienvenida (delante) ----------
 class WelcomePage(QWidget):
-    """Pantalla inicial: título, créditos y botón para ir al descargador."""
+    """Pantalla inicial con tabla de funciones, créditos y acceso al descargador."""
 
     go_to_app = Signal()
 
@@ -47,26 +52,95 @@ class WelcomePage(QWidget):
         self._apply_styles()
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 50, 40, 40)
-        layout.setSpacing(24)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setObjectName("WelcomeScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        outer.addWidget(scroll)
+        body = QWidget()
+        body.setObjectName("WelcomeBody")
+        scroll.setWidget(body)
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(28, 32, 28, 32)
+        layout.setSpacing(18)
+        layout.addStretch(1)
 
         self.lbl_app_title = QLabel("YouTube Downloader")
         self.lbl_app_title.setObjectName("WelcomeTitle")
+        self.lbl_app_title.setWordWrap(True)
+        self.lbl_app_title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.lbl_app_title)
+        subtitle = QLabel("Descarga vídeos, extrae audio y convierte voz en texto")
+        subtitle.setObjectName("WelcomeSubtitle")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
 
-        self.lbl_credits = QLabel("by Borja Merchan McKenna")
-        self.lbl_credits.setObjectName("WelcomeCredits")
-
-        layout.addStretch(1)
-        layout.addWidget(self.lbl_app_title, 0, Qt.AlignCenter)
-        layout.addWidget(self.lbl_credits, 0, Qt.AlignCenter)
-        layout.addStretch(1)
+        table = QFrame()
+        table.setObjectName("FeaturesTable")
+        table.setMaximumWidth(760)
+        grid = QGridLayout(table)
+        grid.setContentsMargins(22, 18, 22, 18)
+        grid.setHorizontalSpacing(24)
+        grid.setVerticalSpacing(13)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 3)
+        for column, text in enumerate(("FUNCIÓN", "QUÉ PUEDES HACER")):
+            label = QLabel(text)
+            label.setObjectName("FeatureHeader")
+            grid.addWidget(label, 0, column)
+        rows = (
+            ("Vídeo · MP4", "Descarga vídeos con audio y selecciona la calidad."),
+            ("Audio · MP3", "Extrae el audio y guárdalo en formato MP3."),
+            ("Transcripción · TXT", "Convierte el audio en un archivo de texto."),
+            ("Playlists", "Procesa los vídeos de una lista consecutivamente."),
+            ("Opciones combinadas", "Elige vídeo, audio y transcripción en una misma ejecución."),
+        )
+        for index, (name, description) in enumerate(rows):
+            separator = QFrame()
+            separator.setObjectName("FeatureSeparator")
+            separator.setFixedHeight(1)
+            grid.addWidget(separator, index * 2 + 1, 0, 1, 2)
+            title = QLabel(name)
+            title.setObjectName("FeatureName")
+            title.setWordWrap(True)
+            detail = QLabel(description)
+            detail.setObjectName("FeatureDetail")
+            detail.setWordWrap(True)
+            grid.addWidget(title, index * 2 + 2, 0)
+            grid.addWidget(detail, index * 2 + 2, 1)
+        table_row = QHBoxLayout()
+        table_row.addStretch(1)
+        table_row.addWidget(table, 10)
+        table_row.addStretch(1)
+        layout.addLayout(table_row)
 
         self.btn_start = QPushButton("Comenzar")
         self.btn_start.setObjectName("WelcomeBtn")
         self.btn_start.setCursor(Qt.PointingHandCursor)
         self.btn_start.clicked.connect(self._go)
         layout.addWidget(self.btn_start, 0, Qt.AlignCenter)
+
+        self.lbl_credits = QLabel("by Borja Merchan McKenna")
+        self.lbl_credits.setObjectName("WelcomeCredits")
+        layout.addWidget(self.lbl_credits, 0, Qt.AlignCenter)
+        self.lbl_profiles = QLabel(
+            '<a href="https://www.linkedin.com/in/borja-merchan-mckenna/" '
+            'style="color: #8eb7ff;">LinkedIn</a>'
+            ' &nbsp; · &nbsp; '
+            '<a href="https://github.com/BorjaMerMck" '
+            'style="color: #8eb7ff;">GitHub</a>'
+        )
+        self.lbl_profiles.setObjectName("WelcomeProfiles")
+        self.lbl_profiles.setTextFormat(Qt.RichText)
+        self.lbl_profiles.setTextInteractionFlags(
+            Qt.LinksAccessibleByMouse | Qt.LinksAccessibleByKeyboard
+        )
+        self.lbl_profiles.setOpenExternalLinks(True)
+        self.lbl_profiles.setAccessibleName("Perfiles de Borja: LinkedIn y GitHub")
+        layout.addWidget(self.lbl_profiles, 0, Qt.AlignCenter)
         layout.addStretch(1)
 
     def _go(self):
@@ -77,6 +151,18 @@ class WelcomePage(QWidget):
     def _apply_styles(self):
         self.setStyleSheet(
             """
+            #WelcomeScroll, #WelcomeBody { background: #0f1115; border: none; }
+            #WelcomeSubtitle { color: #a6afbf; font-size: 15px; }
+            QFrame#FeaturesTable {
+                background: #171c26;
+                border: 1px solid #2b3548;
+                border-radius: 16px;
+            }
+            #FeatureHeader { color: #8eb7ff; font-size: 11px; font-weight: 700; }
+            #FeatureName { color: #edf1f8; font-size: 14px; font-weight: 600; }
+            #FeatureDetail { color: #b3bdcf; font-size: 14px; }
+            #FeatureSeparator { background: #2b3548; border: none; }
+            QPushButton#WelcomeBtn:focus { border: 2px solid #b8d0ff; }
             QWidget#WelcomePage {
                 background: #0f1115;
             }
@@ -103,6 +189,11 @@ class WelcomePage(QWidget):
             QPushButton#WelcomeBtn:hover {
                 background: #2f6cf0;
             }
+            #WelcomeProfiles {
+                font-size: 14px;
+                color: #8b92a3;
+                padding: 4px;
+            }
         """
         )
 
@@ -114,7 +205,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("YouTube Downloader + Transcripción")
-        self.resize(920, 560)
+        self.resize(980, 760)
         self.setStyleSheet("QWidget#MainWindow { background: #0f1115; }")
         self.setObjectName("MainWindow")
         self._init_ui()
@@ -141,6 +232,137 @@ class MainWindow(QWidget):
         self.stack.setCurrentIndex(1)
 
 
+def _fmt_duration(seconds) -> str | None:
+    if not seconds:
+        return None
+    seconds = int(seconds)
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+class QualityConfirmDialog(QDialog):
+    """Avisa la mejor calidad disponible y deja confirmar u elegir otra."""
+
+    def __init__(self, parent: QWidget, info: dict):
+        super().__init__(parent)
+        self.setWindowTitle("Calidad del vídeo")
+        self.setModal(True)
+        self.resize(460, 220)
+
+        best = info.get("best_height")
+        fps = info.get("best_fps")
+        vcodec = (info.get("best_vcodec") or "").split(".")[0]
+        title = info.get("title") or "(sin título)"
+        duration = _fmt_duration(info.get("duration"))
+
+        lines = []
+        if info.get("is_playlist"):
+            plist = info.get("playlist_title") or "Playlist"
+            count = info.get("count") or 0
+            lines.append(f"Playlist: {plist}")
+            lines.append(f"Vídeos: {count}")
+            lines.append("")
+            lines.append(f"Primer vídeo: {title}")
+        else:
+            lines.append(f"Título: {title}")
+        if duration:
+            lines.append(f"Duración: {duration}")
+        lines.append("")
+        if best:
+            extra = []
+            if fps:
+                extra.append(f"{int(fps)} fps")
+            if vcodec and vcodec != "none":
+                extra.append(vcodec)
+            suffix = f" ({', '.join(extra)})" if extra else ""
+            lines.append(f"La mejor calidad disponible es {best}p{suffix}.")
+        else:
+            lines.append("No se pudo listar resoluciones; se intentará la máxima calidad.")
+        if info.get("is_playlist"):
+            lines.append("Esa calidad se usará como tope para toda la playlist.")
+        lines.append("¿Quieres descargar, o eliges otra calidad?")
+
+        layout = QVBoxLayout(self)
+        lbl = QLabel("\n".join(lines))
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+
+        self.combo = QComboBox()
+        best_label = f"{best}p" if best else "máxima"
+        self.combo.addItem(f"Máxima disponible ({best_label})", None)
+        for height in info.get("heights") or []:
+            meta = (info.get("by_height") or {}).get(height) or {}
+            h_fps = meta.get("fps")
+            label = f"{height}p"
+            if h_fps:
+                label += f"  {int(h_fps)} fps"
+            if height == best:
+                label += "  — mejor"
+            self.combo.addItem(label, height)
+        layout.addWidget(self.combo)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("Descargar")
+        buttons.button(QDialogButtonBox.Cancel).setText("Cancelar")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def selected_height(self) -> int | None:
+        data = self.combo.currentData()
+        return int(data) if data else None
+
+
+class OutputCard(QFrame):
+    """Tarjeta multiselección; la casilla conserva acceso por teclado."""
+
+    def __init__(self, title: str, description: str, checked=False):
+        super().__init__()
+        self.setObjectName("OutputCard")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setMinimumWidth(165)
+        self.setMinimumHeight(112)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
+        self.checkbox = QCheckBox(title)
+        self.checkbox.setAccessibleDescription(description)
+        self.checkbox.setCursor(Qt.PointingHandCursor)
+        self.description = QLabel(description)
+        self.description.setObjectName("CardDescription")
+        self.description.setWordWrap(True)
+        self.description.setAttribute(Qt.WA_TransparentForMouseEvents)
+        layout.addWidget(self.checkbox)
+        layout.addWidget(self.description)
+        layout.addStretch()
+        self.checkbox.toggled.connect(self._refresh)
+        self.checkbox.setChecked(checked)
+        self._refresh(checked)
+
+    def isChecked(self):
+        return self.checkbox.isChecked()
+
+    def setChecked(self, checked):
+        self.checkbox.setChecked(checked)
+
+    def _refresh(self, checked):
+        self.setProperty("selected", checked)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
+    def mouseReleaseEvent(self, event):
+        if (event.button() == Qt.LeftButton and self.isEnabled()
+                and self.rect().contains(event.position().toPoint())):
+            self.checkbox.toggle()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+
 class App(QWidget):
     """Pantalla del descargador (vídeo/audio/transcripción)."""
 
@@ -158,6 +380,8 @@ class App(QWidget):
         self.signals.unlock.connect(self._unlock)
         self.signals.busy.connect(self._set_busy)
         self.signals.playlist.connect(self._show_playlist_items)
+        self.signals.quality_ready.connect(self._on_quality_ready)
+        self.signals.stages.connect(self._set_stages)
 
         self.service = MediaService(self.signals)
 
@@ -165,6 +389,7 @@ class App(QWidget):
         self._max_log_lines = 300
         self._last_outputs: list[str] = []
         self._last_out_dir: str = ""
+        self._operation_active = False
 
         self._init_ui()
         self._apply_styles()
@@ -210,14 +435,9 @@ class App(QWidget):
         self.btn_clear.clicked.connect(self.clear_ui)
         self.btn_clear.setObjectName("SecondaryBtn")
 
-        self.chk_video = QCheckBox("Vídeo (MP4)")
-        self.chk_video.setChecked(True)
-
-        self.chk_audio = QCheckBox("Audio (MP3)")
-        self.chk_audio.setChecked(True)
-
-        self.chk_transcribe = QCheckBox("Transcribir (TXT)")
-        self.chk_transcribe.setChecked(False)
+        self.chk_video = OutputCard("Vídeo · MP4", "Vídeo con audio y selección de calidad.", True)
+        self.chk_audio = OutputCard("Audio · MP3", "Audio independiente para escuchar.", True)
+        self.chk_transcribe = OutputCard("Texto · TXT", "Transcripción en español. Incluye MP3.")
 
         self.btn_run = QPushButton("Ejecutar")
         self.btn_run.clicked.connect(self.run)
@@ -237,6 +457,7 @@ class App(QWidget):
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
+        self.progress.setFormat("Transferencia actual: %p%")
 
         self.status_label = QLabel("Estado: listo")
         self.status_label.setObjectName("StatusLabel")
@@ -285,10 +506,9 @@ class App(QWidget):
         grid.addWidget(lbl_opts, 2, 0, Qt.AlignLeft | Qt.AlignTop)
         row_opts = QHBoxLayout()
         row_opts.setSpacing(20)
-        row_opts.addWidget(self.chk_video)
-        row_opts.addWidget(self.chk_audio)
-        row_opts.addWidget(self.chk_transcribe)
-        row_opts.addStretch(1)
+        row_opts.addWidget(self.chk_video, 1)
+        row_opts.addWidget(self.chk_audio, 1)
+        row_opts.addWidget(self.chk_transcribe, 1)
         grid.addLayout(row_opts, 2, 1, 1, 1)
 
         # Fila 3: Acción principal
@@ -309,8 +529,26 @@ class App(QWidget):
         root.addWidget(self.lbl_subtitle)
         root.addWidget(card)
 
-        root.addWidget(self.progress)
-        root.addWidget(self.status_label)
+        status_card = QFrame()
+        status_card.setObjectName("StatusCard")
+        status_layout = QVBoxLayout(status_card)
+        status_layout.setContentsMargins(18, 16, 18, 16)
+        self.phase_label = QLabel("Preparado para comenzar")
+        self.phase_label.setObjectName("PhaseLabel")
+        self.phase_label.setWordWrap(True)
+        self.overall_progress = QProgressBar()
+        self.overall_progress.setRange(0, 1)
+        self.overall_progress.setValue(0)
+        self.overall_progress.setFormat("Sin trabajo iniciado")
+        hint = QLabel("Avance por etapas; no representa el tiempo restante.")
+        hint.setObjectName("MutedLabel")
+        hint.setWordWrap(True)
+        status_layout.addWidget(self.phase_label)
+        status_layout.addWidget(self.overall_progress)
+        status_layout.addWidget(hint)
+        status_layout.addWidget(self.status_label)
+        status_layout.addWidget(self.progress)
+        root.addWidget(status_card)
 
         lbl_log = QLabel("Log")
         lbl_log.setObjectName("SectionTitle")
@@ -422,6 +660,28 @@ class App(QWidget):
         """
         )
 
+        self.setStyleSheet(self.styleSheet() + """
+            QFrame#OutputCard {
+                background: #171d29; border: 2px solid #303b50; border-radius: 12px;
+            }
+            QFrame#OutputCard:hover { border-color: #7a9ce6; }
+            QFrame#OutputCard[selected="true"] {
+                background: #1c3052; border-color: #669bff;
+            }
+            QFrame#OutputCard:disabled { border-color: #303b50; }
+            QFrame#OutputCard QCheckBox {
+                background: transparent; font-size: 15px; font-weight: 600;
+            }
+            QFrame#OutputCard QCheckBox:focus { color: #99bfff; }
+            QFrame#OutputCard QLabel { background: transparent; }
+            QLabel#CardDescription { color: #b4bfd2; font-size: 12px; }
+            QFrame#StatusCard {
+                background: #151b26; border: 1px solid #303b50; border-radius: 12px;
+            }
+            QFrame#StatusCard QLabel { background: transparent; }
+            QLabel#PhaseLabel { color: #e7efff; font-size: 16px; font-weight: 600; }
+        """)
+
     # ---------- UI helpers ----------
     def _log(self, msg: str):
         """Agrega un mensaje al log."""
@@ -441,15 +701,33 @@ class App(QWidget):
         self.status_label.setText(f"Estado: {msg}")
 
     def _set_busy(self, is_busy: bool):
-        """Cambia entre barra determinada e indeterminada."""
+        """Actividad sin porcentaje cuando no se conoce el avance real."""
         if is_busy:
-            self.progress.setRange(0, 0)  # indeterminado
-        else:
+            self.progress.setRange(0, 0)
+        elif self.progress.maximum() == 0:
             self.progress.setRange(0, 100)
             self.progress.setValue(0)
 
+    def _reset_tracking(self, label="Preparado para comenzar"):
+        self.phase_label.setText(label)
+        self.overall_progress.setRange(0, 1)
+        self.overall_progress.setValue(0)
+        self.overall_progress.setFormat("Sin etapas completadas")
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+
+    def _set_stages(self, completed: int, total: int, label: str):
+        self.overall_progress.setRange(0, max(1, total))
+        self.overall_progress.setValue(completed)
+        self.overall_progress.setFormat(f"{completed} de {total} etapas completadas")
+        if label:
+            self.phase_label.setText(f"Paso {completed + 1} de {total}: {label}")
+        elif completed == total:
+            self.phase_label.setText("Todas las etapas completadas")
+
     def clear_ui(self):
         """Limpia la interfaz."""
+        self._reset_tracking()
         self.log_box.clear()
         self._log_messages.clear()
         self.btn_open_folder.setEnabled(False)
@@ -469,9 +747,13 @@ class App(QWidget):
             except Exception:
                 continue
         self._set_status("playlist lista")
+        self.phase_label.setText("Consulta de playlist completada")
 
     def _lock(self):
         """Bloquea los controles durante una operación."""
+        self._operation_active = True
+        self.btn_playlist.setEnabled(False)
+        self.url_input.setEnabled(False)
         self.btn_run.setEnabled(False)
         self.btn_cancel.setEnabled(True)
         self.btn_open_folder.setEnabled(False)
@@ -483,6 +765,9 @@ class App(QWidget):
 
     def _unlock(self):
         """Desbloquea los controles."""
+        self._operation_active = False
+        self.btn_playlist.setEnabled(True)
+        self.url_input.setEnabled(True)
         self.btn_run.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.btn_dir.setEnabled(True)
@@ -494,17 +779,25 @@ class App(QWidget):
     def _done(self, msg: str):
         """Muestra mensaje de éxito."""
         self.btn_open_folder.setEnabled(True)
-        self._set_status("listo")
+        self._set_busy(False)
+        self.progress.setValue(100)
+        self._set_status("completado")
+        self.phase_label.setText("Trabajo completado")
         QMessageBox.information(self, "OK", msg)
 
     def _error(self, msg: str):
         """Muestra mensaje de error."""
         self.btn_open_folder.setEnabled(False)
+        self._set_busy(False)
+        self._set_status("error")
+        self.phase_label.setText("Operación interrumpida por un error")
         QMessageBox.critical(self, "Error", msg)
 
     def _cancelled(self, msg: str):
         """Muestra mensaje cuando el usuario cancela el trabajo."""
         self.btn_open_folder.setEnabled(False)
+        self._set_busy(False)
+        self.phase_label.setText("Operación cancelada")
         self._set_status("cancelado")
         QMessageBox.information(self, "Cancelado", msg)
 
@@ -608,12 +901,15 @@ class App(QWidget):
             return
         self.btn_cancel.setEnabled(False)
         self.btn_open_folder.setEnabled(False)
+        self.phase_label.setText("Cancelando; esperando a que termine la operación actual…")
         self._set_status("cancelando…")
         self.signals.log.emit("Cancelando…")
         self.service.request_cancel()
 
     def show_playlist(self):
         """Lee una playlist y muestra sus títulos en el log."""
+        if self._operation_active:
+            return
         url_raw = self.url_input.text().strip()
         playlist_url = self._extract_playlist_url(url_raw)
         if not playlist_url:
@@ -631,6 +927,7 @@ class App(QWidget):
 
         self.log_box.clear()
         self._log_messages.clear()
+        self._reset_tracking("Consultando playlist")
         self._set_status("leyendo playlist…")
         self._lock()
 
@@ -639,20 +936,66 @@ class App(QWidget):
 
     def run(self):
         """Inicia el proceso de descarga/transcripción."""
+        if self._operation_active:
+            return
         job = self._build_job_or_show_error()
         if not job:
             return
 
+        self._reset_tracking("Preparando trabajo")
         self._last_outputs = []
         self._last_out_dir = job.out_dir
         self.btn_open_folder.setEnabled(False)
         self.log_box.clear()
         self._log_messages.clear()
+
+        if job.do_video:
+            self.phase_label.setText("Consultando las calidades disponibles")
+            self._set_status("comprobando calidad…")
+            self._lock()
+            t = threading.Thread(target=self._quality_worker, args=(job,), daemon=True)
+            t.start()
+            return
+
+        self._start_download(job)
+
+    def _start_download(self, job: Job):
         self._set_status("iniciando…")
         self._lock()
-
         t = threading.Thread(target=self._worker, args=(job,), daemon=True)
         t.start()
+
+    def _quality_worker(self, job: Job):
+        try:
+            info = self.service.inspect_media(job.url)
+            if self.service.is_cancelled():
+                raise CancelledError()
+            self.signals.quality_ready.emit(job, info)
+        except CancelledError:
+            self.signals.cancelled.emit("Cancelado por el usuario.")
+            self.signals.unlock.emit()
+        except Exception as e:
+            self.signals.error.emit(f"No se pudo comprobar la calidad.\n\n{e}")
+            self.signals.unlock.emit()
+
+    def _on_quality_ready(self, job: Job, info: dict):
+        self._unlock()
+        dlg = QualityConfirmDialog(self, info)
+        if dlg.exec() != QDialog.Accepted:
+            self._set_status("listo")
+            self._reset_tracking("Descarga cancelada antes de comenzar")
+            self._log("Descarga cancelada: no se confirmó la calidad.")
+            return
+
+        max_height = dlg.selected_height()
+        job = replace(job, max_height=max_height)
+        if max_height:
+            self._log(f"Calidad elegida: {max_height}p")
+        else:
+            best = info.get("best_height")
+            label = f"{best}p" if best else "máxima disponible"
+            self._log(f"Calidad elegida: máxima ({label})")
+        self._start_download(job)
 
     # ---------- job helpers ----------
     def _build_job_or_show_error(self) -> Job | None:
@@ -683,39 +1026,27 @@ class App(QWidget):
             QMessageBox.warning(self, "Nada seleccionado", "Selecciona al menos una opción.")
             return None
 
-        # Si el usuario pegó un link de vídeo con parámetro list=, dejar elegir
-        # entre descargar solo el vídeo (normalizado) o toda la playlist.
+        # La selección de playlist también se ofrece cuando solo se solicita TXT.
         playlist_url = self._extract_playlist_url(url_raw)
-        if playlist_url and (do_video or do_audio):
+        if playlist_url:
+            playlist_only = self.service._is_playlist_url(url)
+            question = (
+                "¿Quieres procesar TODOS los vídeos de esta playlist con las opciones seleccionadas?"
+                if playlist_only else
+                "Esta URL incluye una playlist.\n\n"
+                "¿Quieres procesar TODA la playlist?\n"
+                "Si eliges No, se procesará únicamente el vídeo del enlace."
+            )
+            if do_transcribe:
+                question += "\n\nSe generará un TXT por vídeo y se conservará su MP3."
             reply = QMessageBox.question(
-                self,
-                "Descargar playlist",
-                "Esta URL contiene una playlist.\n\n"
-                "¿Quieres descargar TODA la playlist (en vez de solo el vídeo)?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                self, "Procesar playlist", question,
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if reply == QMessageBox.Yes:
                 url = playlist_url
-                if do_transcribe:
-                    QMessageBox.information(
-                        self,
-                        "Transcripción en playlists",
-                        "La transcripción (TXT) para playlists todavía no está soportada.\n"
-                        "Voy a desactivar 'Transcribir (TXT)' y descargar solo vídeo/audio.",
-                    )
-                    self.chk_transcribe.setChecked(False)
-                    do_transcribe = False
-
-        if do_transcribe and "youtube.com/playlist" in url:
-            QMessageBox.warning(
-                self,
-                "Transcripción en playlists",
-                "La transcripción para playlists todavía no está soportada. "
-                "Desmarco 'Transcribir (TXT)'.",
-            )
-            self.chk_transcribe.setChecked(False)
-            do_transcribe = False
+            elif playlist_only:
+                return None
 
         # Evitar trabajo duplicado si solo quieres vídeo y también MP3 (sin transcripción).
         if do_video and do_audio and not do_transcribe:
@@ -758,9 +1089,13 @@ class App(QWidget):
                     else:
                         last_dir = os.path.dirname(maybe_path)
                     break
-            self._last_out_dir = last_dir or job.out_dir
+            self._last_out_dir = job.out_dir if self.service._is_playlist_url(job.url) else (last_dir or job.out_dir)
             self.signals.status.emit("listo")
-            self.signals.done.emit("Completado:\n\n" + "\n".join(outputs))
+            preview = outputs[:12]
+            message = "Completado:\n\n" + "\n".join(preview)
+            if len(outputs) > len(preview):
+                message += f"\n\n… y {len(outputs) - len(preview)} archivos más. Consulta la carpeta de salida."
+            self.signals.done.emit(message)
         except DownloadError as e:
             if self.service.is_cancelled():
                 self.signals.cancelled.emit("Cancelado por el usuario.")

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QIcon
 
 if __package__:
     # Ejecutado como módulo: python -m app.main
@@ -19,8 +20,19 @@ else:
 
 
 def main() -> None:
-    app = QApplication([])
+    # Identidad propia en la barra de tareas de Windows.
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "BorjaMerchanMcKenna.YouTubeDownloader"
+        )
+
+    app = QApplication(sys.argv)
+    resource_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    icon = QIcon(str(resource_dir / "ico.png"))
+    app.setWindowIcon(icon)
     w = MainWindow()
+    w.setWindowIcon(icon)
     w.show()
     app.exec()
 
